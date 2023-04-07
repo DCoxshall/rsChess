@@ -54,6 +54,11 @@ impl Board {
         let fields: Vec<&str> = fen_string.split_whitespace().collect();
         // This regex would also in theory match an empty string, but
         let castling_regex = Regex::new("[^K?Q?k?q?$]|[^-$]").unwrap();
+
+        if fields.len() != 6 {
+            return Err(String::from("Invalid FEN: One or more fields are missing."));
+        }
+
         let mut new_board = Board {
             bitboards: HashMap::from([
                 ('P', 0),
@@ -70,28 +75,16 @@ impl Board {
                 ('k', 0),
             ]),
 
-            // TODO: Fix this garbage
-            turn: match fields.get(1) {
-                None => return Err(String::from("Invalid FEN: No turn field found.")),
-                Some(turn_field) => match (**turn_field).chars().nth(0).unwrap() {
-                    'w' | 'b' => (**turn_field).chars().nth(0).unwrap(),
-                    _ => {
-                        return Err(String::from(
-                            "Invalid FEN: Invalid turn character provided.",
-                        ))
-                    }
-                },
+            // Unwraps are justified because each field is guaranteed to have
+            // one or more characters.
+            turn: match fields[1].chars().nth(0).unwrap() {
+                'w' | 'b' => fields[1].chars().nth(0).unwrap(),
+                _ => return Err(String::from("Invalid turn field.")),
             },
-            castling_rights: match fields.get(2) {
-                None => return Err(String::from("Invalid FEN: No castling rights found.")),
-                Some(castling) => match *castling {
-                    c if castling_regex.is_match(c) => (**castling).to_string(),
-                    _ => {
-                        return Err(String::from(
-                            "Invalid FEN: Invalid castling rights provided.",
-                        ))
-                    }
-                },
+
+            castling_rights: match fields[2] {
+                castling if castling_regex.is_match(castling) => castling.to_string(),
+                _ => return Err(String::from("Invalid castling field.")),
             },
 
             en_passant_target: match fields.get(3) {
