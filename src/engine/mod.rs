@@ -54,6 +54,7 @@ impl Board {
         let fields: Vec<&str> = fen_string.split_whitespace().collect();
         // This regex would also in theory match an empty string, but
         let castling_regex = Regex::new("[^K?Q?k?q?$]|[^-$]").unwrap();
+        let en_passant_regex = Regex::new("^[a-h][1-8]$").unwrap();
 
         if fields.len() != 6 {
             return Err(String::from("Invalid FEN: One or more fields are missing."));
@@ -87,18 +88,13 @@ impl Board {
                 _ => return Err(String::from("Invalid castling field.")),
             },
 
-            en_passant_target: match fields.get(3) {
-                None => return Err(String::from("Invalid FEN: No en passant target found.")),
-                Some(square) => match Board::convert_square_to_bitboard(square) {
-                    Ok(bitboard) => bitboard,
-                    Err(err) => {
-                        let mut error_string: String =
-                            String::from("Invalid FEN: Invalid en passant target: ");
-                        error_string.push_str(err);
-                        return Err(error_string);
-                    }
-                },
+            en_passant_target: match fields[3] {
+                en_passant_target if en_passant_regex.is_match(en_passant_target) => {
+                    Board::convert_square_to_bitboard(en_passant_target).unwrap()
+                }
+                _ => return Err(String::from("Invalid en passant field.")),
             },
+
             half_move_clock: fields[4].to_string().parse::<i32>().unwrap(),
             full_move_clock: fields[5].to_string().parse::<i32>().unwrap(),
         };
