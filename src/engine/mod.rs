@@ -1,5 +1,7 @@
 use std::{collections::HashMap, fmt::Display};
 
+use regex::Regex;
+
 pub struct Board {
     // Bitboards
     pub bitboards: HashMap<char, u64>,
@@ -48,8 +50,10 @@ impl Board {
         arr
     }
 
-    pub fn parse_fen(fen_string: &String) -> Board {
+    pub fn parse_fen(fen_string: &String) -> Result<Board, String> {
         let fields: Vec<&str> = fen_string.split_whitespace().collect();
+        // This regex would also in theory match an empty string, but
+        let castling_regex = Regex::new("[^K?Q?k?q?$]|[^-$]").unwrap();
         let mut new_board = Board {
             bitboards: HashMap::from([
                 ('P', 0),
@@ -66,9 +70,42 @@ impl Board {
                 ('k', 0),
             ]),
 
-            turn: fields[1].chars().nth(0).unwrap(),
-            castling_rights: fields[2].to_string(),
-            en_passant_target: Board::convert_square_to_bitboard(&fields[3]),
+            // TODO: Fix this garbage
+            turn: match fields.get(1) {
+                None => return Err(String::from("Invalid FEN: No turn field found.")),
+                Some(turn_field) => match (**turn_field).chars().nth(0).unwrap() {
+                    'w' | 'b' => (**turn_field).chars().nth(0).unwrap(),
+                    _ => {
+                        return Err(String::from(
+                            "Invalid FEN: Invalid turn character provided.",
+                        ))
+                    }
+                },
+            },
+            castling_rights: match fields.get(2) {
+                None => return Err(String::from("Invalid FEN: No castling rights found.")),
+                Some(castling) => match *castling {
+                    c if castling_regex.is_match(c) => (**castling).to_string(),
+                    _ => {
+                        return Err(String::from(
+                            "Invalid FEN: Invalid castling rights provided.",
+                        ))
+                    }
+                },
+            },
+
+            en_passant_target: match fields.get(3) {
+                None => return Err(String::from("Invalid FEN: No en passant target found.")),
+                Some(square) => match Board::convert_square_to_bitboard(square) {
+                    Ok(bitboard) => bitboard,
+                    Err(err) => {
+                        let mut error_string: String =
+                            String::from("Invalid FEN: Invalid en passant target: ");
+                        error_string.push_str(err);
+                        return Err(error_string);
+                    }
+                },
+            },
             half_move_clock: fields[4].to_string().parse::<i32>().unwrap(),
             full_move_clock: fields[5].to_string().parse::<i32>().unwrap(),
         };
@@ -89,20 +126,29 @@ impl Board {
             }
         }
 
-        new_board
+        Ok(new_board)
     }
 
-    fn convert_square_to_bitboard(square: &str) -> u64 {
-        if square.len() == 1 {
-            // square could only be '-', which means there is no valid en passant target
-            return 0;
-        }
+    fn convert_square_to_bitboard(square: &str) -> Result<u64, &str> {
         let alphabet = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
-        let square_file = square.chars().nth(0).unwrap();
-        let square_rank = square.chars().nth(1).unwrap();
+        let square_file = match square.chars().nth(0) {
+            Some(ch) if "abcdefgh".contains(ch) => ch,
+            Some(_ch) => return Err("No file provided."),
+            None => return Err("No en passant square provided."),
+        };
+
+        if square_file == '-' {
+            // No en passant square: return empty bitboard
+            return Ok(0);
+        }
+        let square_rank = match square.chars().nth(1) {
+            Some(ch) if "12345678".contains(ch) => ch,
+            None => return Err("No rank provided."),
+            _ => return Err("Invalid rank provided."),
+        };
         let file_number: i32 = alphabet.iter().position(|&x| x == square_file).unwrap() as i32;
         let rank_number = square_rank.to_string().parse::<i32>().unwrap() - 1;
-        return 9223372036854775808 >> (file_number * 8 + rank_number);
+        return Ok(9223372036854775808 >> (file_number * 8 + rank_number));
         // 9223372036854775808 is the number which represents a 1 followed by 63 zeroes.
     }
 }
