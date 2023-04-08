@@ -2,6 +2,7 @@ use std::{collections::HashMap, fmt::Display};
 
 use regex::Regex;
 
+#[derive(Debug, PartialEq, Eq)]
 pub struct Board {
     // Bitboards
     pub bitboards: HashMap<char, u64>,
@@ -54,7 +55,7 @@ impl Board {
         let fields: Vec<&str> = fen_string.split_whitespace().collect();
         // This regex would also in theory match an empty string, but
         let castling_regex = Regex::new("[^K?Q?k?q?$]|[^-$]").unwrap();
-        let en_passant_regex = Regex::new("^[a-h][1-8]$").unwrap();
+        let en_passant_regex = Regex::new("^([a-h][1-8]$)|^-$").unwrap();
 
         if fields.len() != 6 {
             return Err(String::from("Invalid FEN: One or more fields are missing."));
@@ -104,14 +105,11 @@ impl Board {
             if "PRNBQKprnbqk".contains(c) {
                 new_board.bitboards.insert(
                     c,
-                    new_board.bitboards.get(&c).unwrap() | 9223372036854775808 >> pos,
+                    new_board.bitboards.get(&c).unwrap() | 1 << 63 - pos,
                 );
+                pos += 1;
             } else if "12345678".contains(c) {
                 pos += c.to_digit(10).unwrap();
-            }
-
-            if String::from("PRNBQKprnbqk").contains(c) {
-                pos += 1;
             }
         }
 
@@ -121,7 +119,7 @@ impl Board {
     fn convert_square_to_bitboard(square: &str) -> Result<u64, &str> {
         let alphabet = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
         let square_file = match square.chars().nth(0) {
-            Some(ch) if "abcdefgh".contains(ch) => ch,
+            Some(ch) if "abcdefgh-".contains(ch) => ch,
             Some(_ch) => return Err("No file provided."),
             None => return Err("No en passant square provided."),
         };
@@ -135,9 +133,51 @@ impl Board {
             None => return Err("No rank provided."),
             _ => return Err("Invalid rank provided."),
         };
-        let file_number: i32 = alphabet.iter().position(|&x| x == square_file).unwrap() as i32;
+        let file_number: i32 = 7 - alphabet.iter().position(|&x| x == square_file).unwrap() as i32;
         let rank_number = square_rank.to_string().parse::<i32>().unwrap() - 1;
-        return Ok(9223372036854775808 >> (file_number * 8 + rank_number));
-        // 9223372036854775808 is the number which represents a 1 followed by 63 zeroes.
+        Ok(1 << rank_number * 8 + file_number)
     }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    macro_rules! test_fen {
+        ($name:tt: $fen:literal, $($field:tt = $value:expr),* $(,)?) => {
+            paste::paste! {
+                $(
+                    #[test]
+                    fn [<$name _ $field>]() {
+                        let Board { $field, .. } = Board::parse_fen(&$fen.to_string()).unwrap();
+                        assert_eq!($field, $value);
+                    }
+                )*
+            }
+        }
+    }
+
+    test_fen!(start_position: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        turn = 'w',
+        castling_rights = "KQkq",
+        en_passant_target = 0,
+        half_move_clock = 0,
+        full_move_clock = 1,
+    );
+
+    test_fen!(en_passant: "rnbqkbnr/1ppp1ppp/p7/3Pp3/8/8/PPP1PPPP/RNBQKBNR w KQkq e6 0 3",
+        turn = 'w',
+        castling_rights = "KQkq",
+        en_passant_target = 1 << (5 * 8) + 3,
+        half_move_clock = 0,
+        full_move_clock = 3,
+    );
+
+    test_fen!(no_castle: "rnbq1bnr/1pppkppp/p7/3Pp3/8/3Q4/PPP1PPPP/RNBK1BNR b - - 3 4",
+        turn = 'b',
+        castling_rights = "-",
+        en_passant_target = 0,
+        half_move_clock = 3,
+        full_move_clock = 4
+    );
 }
