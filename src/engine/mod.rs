@@ -76,12 +76,11 @@ impl Board {
                 ('q', 0),
                 ('k', 0),
             ]),
-
             // Unwraps are justified because each field is guaranteed to have
             // one or more characters.
-            turn: match fields[1].chars().nth(0).unwrap() {
-                'w' | 'b' => fields[1].chars().nth(0).unwrap(),
-                _ => return Err(String::from("Invalid turn field.")),
+            turn: match fields[1] {
+                turn if Regex::new("^[w|b]$").unwrap().is_match(turn) => turn.chars().nth(0).unwrap(),
+                _ => return Err(String::from("Invalid turn field."))
             },
 
             castling_rights: match fields[2] {
@@ -96,9 +95,21 @@ impl Board {
                 _ => return Err(String::from("Invalid en passant field.")),
             },
 
-            half_move_clock: fields[4].to_string().parse::<i32>().unwrap(),
-            full_move_clock: fields[5].to_string().parse::<i32>().unwrap(),
+            half_move_clock: match fields[4] {
+                half_move_number if half_move_number.parse::<i32>().is_ok() => {
+                    half_move_number.parse::<i32>().unwrap()
+                }
+                _ => return Err(String::from("Invalid half move field."))
+            },
+
+            full_move_clock: match fields[5] {
+                full_move_number if full_move_number.parse::<i32>().is_ok() => {
+                    full_move_number.parse::<i32>().unwrap()
+                }
+                _ => return Err(String::from("Invalid full move field."))
+            },
         };
+
 
         let mut pos = 0;
         for c in fields[0].chars() {
