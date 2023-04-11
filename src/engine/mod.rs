@@ -79,8 +79,10 @@ impl Board {
             // Unwraps are justified because each field is guaranteed to have
             // one or more characters.
             turn: match fields[1] {
-                turn if Regex::new("^[w|b]$").unwrap().is_match(turn) => turn.chars().nth(0).unwrap(),
-                _ => return Err(String::from("Invalid turn field."))
+                turn if Regex::new("^[w|b]$").unwrap().is_match(turn) => {
+                    turn.chars().nth(0).unwrap()
+                }
+                _ => return Err(String::from("Invalid turn field.")),
             },
 
             castling_rights: match fields[2] {
@@ -99,25 +101,23 @@ impl Board {
                 half_move_number if half_move_number.parse::<i32>().is_ok() => {
                     half_move_number.parse::<i32>().unwrap()
                 }
-                _ => return Err(String::from("Invalid half move field."))
+                _ => return Err(String::from("Invalid half move field.")),
             },
 
             full_move_clock: match fields[5] {
                 full_move_number if full_move_number.parse::<i32>().is_ok() => {
                     full_move_number.parse::<i32>().unwrap()
                 }
-                _ => return Err(String::from("Invalid full move field."))
+                _ => return Err(String::from("Invalid full move field.")),
             },
         };
-
 
         let mut pos = 0;
         for c in fields[0].chars() {
             if "PRNBQKprnbqk".contains(c) {
-                new_board.bitboards.insert(
-                    c,
-                    new_board.bitboards.get(&c).unwrap() | 1 << 63 - pos,
-                );
+                new_board
+                    .bitboards
+                    .insert(c, new_board.bitboards.get(&c).unwrap() | 1 << 63 - pos);
                 pos += 1;
             } else if "12345678".contains(c) {
                 pos += c.to_digit(10).unwrap();
@@ -127,23 +127,27 @@ impl Board {
         Ok(new_board)
     }
 
-    fn convert_square_to_bitboard(square: &str) -> Result<u64, &str> {
-        let alphabet = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
-        let square_file = match square.chars().nth(0) {
-            Some(ch) if "abcdefgh-".contains(ch) => ch,
-            Some(_ch) => return Err("No file provided."),
-            None => return Err("No en passant square provided."),
-        };
+    // Converts a single square (e.g. "e4") into a bitboard corresponding to
+    // that square.
+    // Empty squares (i.e. "-") are converted to empty bitboards.
+    pub fn convert_square_to_bitboard(square: &str) -> Result<u64, String> {
+        let square_regex = Regex::new("[a-h][1-8]|-").unwrap();
+        if !square_regex.is_match(square) {
+            return Err(String::from(
+                "Invalid square passed to conversion function.",
+            ));
+        }
 
-        if square_file == '-' {
-            // No en passant square: return empty bitboard
+        let alphabet = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+
+        if square == "-" {
             return Ok(0);
         }
-        let square_rank = match square.chars().nth(1) {
-            Some(ch) if "12345678".contains(ch) => ch,
-            None => return Err("No rank provided."),
-            _ => return Err("Invalid rank provided."),
-        };
+
+        // Unwraps are justified because we've already checked the length of the
+        // string with regex.
+        let square_rank = square.chars().nth(1).unwrap();
+        let square_file = square.chars().nth(0).unwrap();
         let file_number: i32 = 7 - alphabet.iter().position(|&x| x == square_file).unwrap() as i32;
         let rank_number = square_rank.to_string().parse::<i32>().unwrap() - 1;
         Ok(1 << rank_number * 8 + file_number)
@@ -153,6 +157,21 @@ impl Board {
 #[cfg(test)]
 mod test {
     use super::*;
+
+    macro_rules! test_square_to_bitboard {
+        ($square:literal, $bitboard:literal $(,)?) => {
+            paste::paste! {
+                #[test]
+                fn [<$square _ $bitboard>]() {
+                    assert_eq!($bitboard, Board::convert_square_to_bitboard($square).unwrap());
+                }
+            }
+        };
+    }
+
+    test_square_to_bitboard!("e4", 134217728);
+    test_square_to_bitboard!("a1", 128);
+    test_square_to_bitboard!("h8", 72057594037927936);
 
     macro_rules! test_fen {
         ($name:tt: $fen:literal, $($field:tt = $value:expr),* $(,)?) => {

@@ -9,4 +9,5 @@ fn main() {
         Ok(board) => println!("{}", board),
         Err(e) => println!("{}", e),
     }
+    println!("{}", Board::convert_square_to_bitboard("h2").unwrap())
 }
